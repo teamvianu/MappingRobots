@@ -24,6 +24,13 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 # For pose information.
 from tf.transformations import euler_from_quaternion
+# Laser scan message:
+# http://docs.ros.org/api/sensor_msgs/html/msg/LaserScan.html
+from sensor_msgs.msg import LaserScan
+# For displaying frontier points.
+# http://docs.ros.org/api/sensor_msgs/html/msg/PointCloud.html
+from sensor_msgs.msg import PointCloud
+from geometry_msgs.msg import Point32
 
 # Import the potential_field.py code rather than copy-pasting.
 directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../python')
@@ -36,15 +43,21 @@ except ImportError:
   raise ImportError('Unable to import rrt.py. Make sure this file is in "{}"'.format(directory))
 
 
-SPEED = 0.5
+SPEED = 0.25
 EPSILON = .1
 ROBOT_RADIUS = 0.105 / 2.
 may_change_path = True
 corners = None
 
+# Constants used for indexing.
 X = 0
 Y = 1
 YAW = 2
+
+# Constants for occupancy grid.
+FREE = 0
+UNKNOWN = 1
+OCCUPIED = 2
 
 def feedback_linearized(pose, velocity, epsilon):
   u = 0.  # [m/s]
@@ -55,7 +68,6 @@ def feedback_linearized(pose, velocity, epsilon):
   # linearized point in front of the robot.
   u = velocity[0] * np.cos(pose[YAW]) + velocity[1] * np.sin(pose[YAW])
   w = (-velocity[0] * np.sin(pose[YAW]) + velocity[1] * np.cos(pose[YAW])) / epsilon
-  print("Changed direction")
   return u, w
 
 
@@ -64,10 +76,8 @@ def get_velocity(position, path_points):
   if len(path_points) == 0:
     return v
   # Stop moving if the goal is reached.
-  if np.linalg.norm(position - path_points[-1]) < .2:
-    global corners, may_change_path
-    corners = None
-    may_change_path = True
+  if np.linalg.norm(position - path_points[-1]) < .1:
+    print('Reached goal from get_velocity')
     return v
 
   # MISSING: Return the velocity needed to follow the
@@ -128,9 +138,9 @@ class SLAM(object):
   def callback(self, msg):
     values = np.array(msg.data, dtype=np.int8).reshape((msg.info.width, msg.info.height))
     processed = np.empty_like(values)
-    processed[:] = rrt.FREE
-    processed[values < 0] = rrt.UNKNOWN
-    processed[values > 50] = rrt.OCCUPIED
+    processed[:] = FREE
+    processed[values < 0] = UNKNOWN
+    processed[values > 50] = OCCUPIED
     processed = processed.T
     origin = [msg.info.origin.position.x, msg.info.origin.position.y, 0.]
     resolution = msg.info.resolution
@@ -187,6 +197,176 @@ class GoalPose(object):
   def position(self):
     return self._position
 
+
+class Frontier(object):
+  def __init__(self, slam):
+    rospy.Subscriber('/scan', LaserScan, self.callback)
+    self._frontiers = []
+    self._slam = slam
+    self._occupancy_grid = slam.occupancy_grid
+
+  def callback(self, msg):
+    # Helper that updates the frontiers
+    self._occupancy_grid = self._slam.occupancy_grid
+    def _update(self, pose):
+      pass
+
+    def _line(start, end):
+      "Bresenham's line algorithm"
+      x0, y0 = start
+      x1, y1 = end
+      line = []
+      dx = abs(x1 - x0)
+      dy = abs(y1 - y0)
+      x, y = x0, y0
+      sx = -1 if x0 > x1 else 1
+      sy = -1 if y0 > y1 else 1
+      if dx > dy:
+        err = dx / 2.0
+        while x != x1:
+          line.append((x, y))
+          err -= dy
+          if err < 0:
+            y += sy
+            err += dx
+          x += sx
+      else:
+        err = dy / 2.0
+        while y != y1:
+          line.append((x, y))
+          err -= dx
+          if err < 0:
+            x += sx
+            err += dy
+          y += sy
+      line.append((x, y))
+      return line
+
+    def _get_neighbours(point):
+      i,j = point
+      neighbours = []
+      if i==0 or j==0 or i==self._occupancy_grid.values.shape[0]-1 or j==self._occupancy_grid.values.shape[1]-1:
+        return neighbours
+      neighbours.append(self._occupancy_grid.values[i-1, j-1])
+      neighbours.append(self._occupancy_grid.values[i-1, j])
+      neighbours.append(self._occupancy_grid.values[i-1, j+1])
+      neighbours.append(self._occupancy_grid.values[i, j-1])
+      neighbours.append(self._occupancy_grid.values[i, j+1])
+      neighbours.append(self._occupancy_grid.values[i+1, j-1])
+      neighbours.append(self._occupancy_grid.values[i+1, j])
+      neighbours.append(self._occupancy_grid.values[i+1, j+1])
+      return neighbours
+
+    def _is_frontier_point(point):
+      if self._occupancy_grid.values[point] != FREE:
+        return False
+      neighbours = _get_neighbours(point)
+      for neighbour in neighbours:
+        if neighbour == UNKNOWN:
+          return True
+      return False
+
+    # Extract positions where sensor laser hits
+    laser_ranges = []
+    for i, d in enumerate(msg.ranges):
+      if np.isinf(d): # TODO
+        continue
+      angle = msg.angle_min + i * msg.angle_increment + self._slam.pose[YAW]
+      x = self._slam.pose[X] + np.cos(angle) * d
+      y = self._slam.pose[Y] + np.sin(angle) * d
+      i, j = self._occupancy_grid.get_index((x, y))
+      laser_ranges.append((i, j))
+    # Get the contour from laser readings
+    contour = []
+    prev = laser_ranges.pop(0)
+    for point in laser_ranges:
+      contour.extend(_line(prev, point))
+      prev = point
+
+    # Detecting new frontiers from contour
+    new_frontiers = []
+    prev = contour.pop(0)
+
+    if _is_frontier_point(prev):
+      new_frontiers.append([])
+
+    for point in contour:
+      if not _is_frontier_point(point):
+        prev = point
+      elif self._occupancy_grid.values[point] == 1:
+        prev = point
+      elif _is_frontier_point(prev) and _is_frontier_point(point):
+        new_frontiers[-1].append(point)
+        prev = point
+      else:
+        new_frontiers.append([])
+        new_frontiers[-1].append(point)
+        prev = point
+
+
+    # Maintainance of previously detected frontiers
+    # Get active area
+    x_min = np.inf
+    x_max = -np.inf
+    y_min = np.inf
+    y_max = -np.inf
+    for point in laser_ranges:
+      x_min = x_min if x_min < point[0] else point[0]
+      x_max = x_max if x_max > point[0] else point[0]
+      y_min = y_min if y_min < point[1] else point[1]
+      y_max = y_max if y_max > point[1] else point[1]
+
+    # Eliminating previously detected frontiers
+    frontiers_copy = list(self._frontiers)
+    for frontier in frontiers_copy:
+      points_indexes_to_split = [-1]
+      for point in frontier:
+        if x_min <= point[0] <= x_max and y_min <= point[1] <= y_max:
+          points_indexes_to_split.append(frontier.index(point))
+
+      points_indexes_to_split.append(len(frontier))
+      self._frontiers.extend([frontier[points_indexes_to_split[i]+1:points_indexes_to_split[i+1] + 1] for i in range(len(points_indexes_to_split)-1)])
+      self._frontiers.remove(frontier)
+    self._frontiers = filter(None, self._frontiers) # Erase empty lists
+
+    for frontier in self._frontiers:
+      for point in frontier:
+        if not _is_frontier_point(point):
+          frontier.remove(point)
+
+    # Old frontier
+    point_to_frontier = {}
+    for frontier in self._frontiers:
+      for point in frontier:
+        point_to_frontier[point] = frontier
+
+
+    # Storing new detected frontiers
+    new_frontiers.extend(self._frontiers)
+    self._frontiers = []
+    while len(new_frontiers) > 0:
+      first, rest = new_frontiers[0], new_frontiers[1:]
+      first = set(first)
+      lf = -1
+      while len(first) > lf:
+        lf = len(first)
+        rest2 = []
+        for r in rest:
+          if len(first.intersection(set(r))) > 0:
+            first |= set(r)
+          else:
+            rest2.append(r)
+        rest = rest2
+      self._frontiers.append(list(first))
+      new_frontiers = rest
+    self._frontiers = list(self._frontiers)
+
+
+  @property
+  def frontiers(self):
+    return self._frontiers
+
+
 def get_path(final_node):
   # Construct path from RRT solution.
   if final_node is None:
@@ -242,21 +422,29 @@ def get_path_smart(final_node):
   points_x = []
   points_y = []
   for u, v in zip(path, path[1:]):
-    points_x.extend(np.linspace(u.position[0],v.position[0],10))
-    points_y.extend(np.linspace(u.position[1],v.position[1],10))
+    num_points = int(np.linalg.norm(u.position-v.position) / (4 * ROBOT_RADIUS))+1
+    points_x.extend(np.linspace(u.position[0],v.position[0],num_points))
+    points_y.extend(np.linspace(u.position[1],v.position[1],num_points))
 
   return zip(points_x, points_y), path[1:]
 
 
+def update_robot_assignment(frontier, pose):
+  frontiers = frontier.frontiers
+  pass
+
 
 def run(args):
   rospy.init_node('rrt_navigation')
+  global may_change_path
   # Update control every 100 ms.
   rate_limiter = rospy.Rate(100)
   publisher = rospy.Publisher('/cmd_vel', Twist, queue_size=5)
   path_publisher = rospy.Publisher('/path', Path, queue_size=1)
+  frontier_publisher = rospy.Publisher('/frontier', PointCloud, queue_size=1)
   slam = SLAM()
   goal = GoalPose()
+  frontier = Frontier(slam)
   frame_id = 0
   current_path = []
   previous_time = rospy.Time.now().to_sec()
@@ -284,11 +472,44 @@ def run(args):
       rate_limiter.sleep()
       continue
 
+    # Publish frontier to RViz.
+    frontier_msg = PointCloud()
+    frontier_msg.header.seq = frame_id
+    frontier_msg.header.stamp = rospy.Time.now()
+    frontier_msg.header.frame_id = 'odom'
+    for f in frontier.frontiers:
+      for u in f:
+        v = slam.occupancy_grid.get_position(u[0], u[1])
+        frontier_pt = Point32()
+        frontier_pt.x = v[0]
+        frontier_pt.y = v[1]
+        frontier_pt.z = 1
+        frontier_msg.points.append(frontier_pt)
+    frontier_publisher.publish(frontier_msg)
+
+    # Publish path to RViz.
+    path_msg = Path()
+    path_msg.header.seq = frame_id
+    path_msg.header.stamp = rospy.Time.now()
+    path_msg.header.frame_id = 'map'
+    for u in current_path:
+      pose_msg = PoseStamped()
+      pose_msg.header.seq = frame_id
+      pose_msg.header.stamp = path_msg.header.stamp
+      pose_msg.header.frame_id = 'map'
+      pose_msg.pose.position.x = u[X]
+      pose_msg.pose.position.y = u[Y]
+      path_msg.poses.append(pose_msg)
+    path_publisher.publish(path_msg)
+
+    frame_id += 1
+
     goal_reached = np.linalg.norm(slam.pose[:2] - goal.position) < .2
     if goal_reached:
-      may_change_path = True
       publisher.publish(stop_msg)
+      current_path = []
       rate_limiter.sleep()
+      update_robot_assignment(frontier, slam.pose)
       continue
 
     # Follow path using feedback linearization.
@@ -302,11 +523,10 @@ def run(args):
     vel_msg.angular.z = w
     publisher.publish(vel_msg)
 
-    global corners, may_change_path
     # if not corners is None:
     #   may_change_path = is_far_enough_from_corner(position, corners)
 
-    # Update plan every 1s.
+    # Update plan every 1s & only if may_change_path.
     time_since = current_time - previous_time
     if (current_path and time_since < 5.) or not may_change_path:
       rate_limiter.sleep()
@@ -331,30 +551,12 @@ def run(args):
     current_path, corners = get_path_smart(final_node)
     print("Finished finding new path")
 
-
     if not current_path:
+      may_change_path = True
       print('Unable to reach goal position:', goal.position)
 
-    # Publish path to RViz.
-    path_msg = Path()
-    path_msg.header.seq = frame_id
-    path_msg.header.stamp = rospy.Time.now()
-    path_msg.header.frame_id = 'map'
-    for u in current_path:
-      pose_msg = PoseStamped()
-      pose_msg.header.seq = frame_id
-      pose_msg.header.stamp = path_msg.header.stamp
-      pose_msg.header.frame_id = 'map'
-      pose_msg.pose.position.x = u[X]
-      pose_msg.pose.position.y = u[Y]
-      path_msg.poses.append(pose_msg)
-    path_publisher.publish(path_msg)
-
     rate_limiter.sleep()
-    frame_id += 1
-
     previous_time = rospy.Time.now().to_sec()
-
 
 
 if __name__ == '__main__':

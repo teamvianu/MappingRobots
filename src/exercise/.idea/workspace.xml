@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="f0684558-1cfe-44b3-ab9c-5c06979f97ae" name="Default Changelist" comment="" />
+    <list default="true" id="f0684558-1cfe-44b3-ab9c-5c06979f97ae" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/part/ros/rrt_navigation.py" beforeDir="false" afterPath="$PROJECT_DIR$/part/ros/rrt_navigation.py" afterDir="false" />
+    </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -13,10 +16,13 @@
       <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/part/ros/rrt_navigation.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="165">
-              <caret line="38" column="11" selection-start-line="38" selection-start-column="11" selection-end-line="38" selection-end-column="11" />
+            <state relative-caret-position="7">
+              <caret line="270" selection-start-line="270" selection-end-line="270" />
               <folding>
                 <element signature="e#23#61#0" expanded="true" />
+                <element signature="e#6957#7544#0" />
+                <element signature="e#7761#7989#0" />
+                <element signature="e#11203#11382#0" />
               </folding>
             </state>
           </provider>
@@ -25,8 +31,20 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/part/python/rrt.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="275">
-              <caret line="222" column="13" lean-forward="true" selection-start-line="222" selection-start-column="13" selection-end-line="222" selection-end-column="13" />
+            <state relative-caret-position="442">
+              <caret line="143" lean-forward="true" selection-start-line="143" selection-end-line="143" />
+              <folding>
+                <element signature="e#0#38#0" expanded="true" />
+              </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/part/python/rrt_improved.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="-15">
+              <caret line="14" selection-start-line="14" selection-end-line="22" selection-end-column="12" />
               <folding>
                 <element signature="e#0#38#0" expanded="true" />
               </folding>
@@ -37,8 +55,8 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/part/python/rrt_smart.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="1431">
-              <caret line="389" column="31" lean-forward="true" selection-start-line="389" selection-start-column="31" selection-end-line="389" selection-end-column="31" />
+            <state relative-caret-position="187">
+              <caret line="394" column="44" selection-start-line="394" selection-end-line="395" />
               <folding>
                 <element signature="e#0#38#0" expanded="true" />
               </folding>
@@ -73,36 +91,36 @@
   </component>
   <component name="FindInProjectRecents">
     <findStrings>
-      <find>rrt_smar</find>
-      <find>print(_</find>
-      <find>min_X</find>
-      <find>get_path_smart</find>
-      <find>get_pat</find>
-      <find>rrt</find>
-      <find>rrt_sma</find>
-      <find>get_cos</find>
-      <find>rrt.</find>
-      <find>print(</find>
-      <find>frame_id</find>
-      <find>frame_id =</find>
-      <find>get_ve</find>
-      <find>num_p</find>
-      <find>current_</find>
-      <find>radius</find>
-      <find>Node</find>
+      <find>OccupancyGrid</find>
+      <find>Occupan</find>
+      <find>Subscriber</find>
+      <find>laser</find>
+      <find>is_free</find>
+      <find>get_inde</find>
+      <find>path_publisher</find>
+      <find>occupancy</find>
+      <find>occupancy_grid</find>
+      <find>may_change_path = True</find>
+      <find>contor</find>
+      <find>Path(</find>
+      <find>get_po</find>
+      <find>intensity</find>
+      <find>may_c</find>
+      <find>frontiers</find>
+      <find>may_change</find>
+      <find>may_cha</find>
+      <find>goal po</find>
+      <find>OCCU</find>
+      <find>num_</find>
       <find>corners</find>
-      <find>get_velocity</find>
-      <find>5</find>
-      <find>corn</find>
-      <find>validi</find>
-      <find>ROBOT</find>
-      <find>rrt_</find>
-      <find>print</find>
-      <find>findi</find>
-      <find>smart</find>
-      <find>rend</find>
-      <find>redunda</find>
+      <find>scan</find>
+      <find>path</find>
+      <find>callback</find>
+      <find>l</find>
+      <find>print(</find>
       <find>goal</find>
+      <find>FREE</find>
+      <find>laser_ra</find>
     </findStrings>
     <replaceStrings>
       <replace />
@@ -112,7 +130,8 @@
     </dirStrings>
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/part/ros/models/robocup_world" />
+    <option name="ROOT_SYNC" value="DONT_SYNC" />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../.." />
   </component>
   <component name="IdeDocumentHistory">
     <option name="CHANGED_PATHS">
@@ -218,7 +237,7 @@
     </panes>
   </component>
   <component name="PropertiesComponent">
-    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
+    <property name="last_opened_file_path" value="$USER_HOME$/ex catkin_ws/src/exercises" />
   </component>
   <component name="RunDashboard">
     <option name="ruleStates">
@@ -337,16 +356,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/part/python/rrt_improved.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="495">
-          <caret line="135" column="23" selection-start-line="135" selection-start-column="23" selection-end-line="135" selection-end-column="23" />
-          <folding>
-            <element signature="e#0#38#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/part/ros/launch/gazebo_simple.launch">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="180">
@@ -363,8 +372,18 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/part/python/rrt.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="275">
-          <caret line="222" column="13" lean-forward="true" selection-start-line="222" selection-start-column="13" selection-end-line="222" selection-end-column="13" />
+        <state relative-caret-position="442">
+          <caret line="143" lean-forward="true" selection-start-line="143" selection-end-line="143" />
+          <folding>
+            <element signature="e#0#38#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/part/python/rrt_improved.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="-15">
+          <caret line="14" selection-start-line="14" selection-end-line="22" selection-end-column="12" />
           <folding>
             <element signature="e#0#38#0" expanded="true" />
           </folding>
@@ -373,8 +392,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/part/python/rrt_smart.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="1431">
-          <caret line="389" column="31" lean-forward="true" selection-start-line="389" selection-start-column="31" selection-end-line="389" selection-end-column="31" />
+        <state relative-caret-position="187">
+          <caret line="394" column="44" selection-start-line="394" selection-end-line="395" />
           <folding>
             <element signature="e#0#38#0" expanded="true" />
           </folding>
@@ -383,10 +402,13 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/part/ros/rrt_navigation.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="165">
-          <caret line="38" column="11" selection-start-line="38" selection-start-column="11" selection-end-line="38" selection-end-column="11" />
+        <state relative-caret-position="7">
+          <caret line="270" selection-start-line="270" selection-end-line="270" />
           <folding>
             <element signature="e#23#61#0" expanded="true" />
+            <element signature="e#6957#7544#0" />
+            <element signature="e#7761#7989#0" />
+            <element signature="e#11203#11382#0" />
           </folding>
         </state>
       </provider>
