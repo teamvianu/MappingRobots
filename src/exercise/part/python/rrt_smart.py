@@ -223,7 +223,7 @@ def rrt(start_pose, goal_position, occupancy_grid):
     start_time = time.time()
     position = sample_random_position(min_X, max_X, min_Y, max_Y, occupancy_grid)
     end_time = time.time()
-    print("Sampling shiny new position takes " + str(end_time - start_time) + " seconds. How slow.")
+    # print("Sampling shiny new position takes " + str(end_time - start_time) + " seconds. How slow.")
 
     # With a random chance, draw the goal position.
     if np.random.rand() < .05:
@@ -234,7 +234,7 @@ def rrt(start_pose, goal_position, occupancy_grid):
     start_time = time.time()
     potential_parents = sorted(((n, np.linalg.norm(position - n.position)) for n in graph), key=lambda x: x[1])
     end_time = time.time()
-    print("Sorting parents took " + str(end_time - start_time) + " seconds. How slow.")
+    # print("Sorting parents took " + str(end_time - start_time) + " seconds. How slow.")
 
     # Pick a node at least some distance away but not too far.
     u = []
@@ -279,7 +279,7 @@ def rrt_improved(start_pose, goal_position, occupancy_grid):
     start_time = time.time()
     position = sample_random_position(min_X, max_X, min_Y, max_Y, occupancy_grid)
     end_time = time.time()
-    print("Sampling shiny new position takes " + str(end_time - start_time) + " seconds. How slow.")
+    # print("Sampling shiny new position takes " + str(end_time - start_time) + " seconds. How slow.")
 
     # With a random chance, draw the goal position.
     if np.random.rand() < .05:
@@ -290,7 +290,7 @@ def rrt_improved(start_pose, goal_position, occupancy_grid):
     start_time = time.time()
     potential_parents = sorted(((n, np.linalg.norm(position - n.position)) for n in graph), key=lambda x: x[1])
     end_time = time.time()
-    print("Sorting parents took " + str(end_time - start_time) + " seconds. How slow.")
+    # print("Sorting parents took " + str(end_time - start_time) + " seconds. How slow.")
 
     # Pick a node at least some distance away but not too far.
     u = []
@@ -314,7 +314,7 @@ def rrt_improved(start_pose, goal_position, occupancy_grid):
     v = Node(parent_pose)
     v.cost = min_cost
     end_time = time.time()
-    print("Choosing best cost parent takes " + str(end_time - start_time) + " seconds. How slow.")
+    # print("Choosing best cost parent takes " + str(end_time - start_time) + " seconds. How slow.")
 
     start_time = time.time()
     for other_parent in u:
@@ -332,7 +332,7 @@ def rrt_improved(start_pose, goal_position, occupancy_grid):
         v.add_neighbor(other_parent)
         other_parent.parent = v
     end_time = time.time()
-    print("Updates cost " + str(end_time - start_time) + " seconds. How slow.")
+    # print("Updates cost " + str(end_time - start_time) + " seconds. How slow.")
 
     min_cost_parent.add_neighbor(v)
     v.parent = min_cost_parent
@@ -372,7 +372,7 @@ def rrt_smart(start_node, final_node, occupancy_grid):
 
 
   end_time = time.time()
-  print("Redundancy checks took " + str(end_time - start_time) + " seconds.")
+  # print("Redundancy checks took " + str(end_time - start_time) + " seconds.")
 
   # # Sample points around current points
   # start_time = time.time()

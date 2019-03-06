@@ -59,6 +59,39 @@ FREE = 0
 UNKNOWN = 1
 OCCUPIED = 2
 
+
+def line(start, end):
+  "Bresenham's line algorithm"
+  x0, y0 = start
+  x1, y1 = end
+  line = []
+  dx = abs(x1 - x0)
+  dy = abs(y1 - y0)
+  x, y = x0, y0
+  sx = -1 if x0 > x1 else 1
+  sy = -1 if y0 > y1 else 1
+  if dx > dy:
+    err = dx / 2.0
+    while x != x1:
+      line.append((x, y))
+      err -= dy
+      if err < 0:
+        y += sy
+        err += dx
+      x += sx
+  else:
+    err = dy / 2.0
+    while y != y1:
+      line.append((x, y))
+      err -= dx
+      if err < 0:
+        x += sx
+        err += dy
+      y += sy
+  line.append((x, y))
+  return line
+
+
 def feedback_linearized(pose, velocity, epsilon):
   u = 0.  # [m/s]
   w = 0.  # [rad/s] going counter-clockwise.
@@ -77,7 +110,7 @@ def get_velocity(position, path_points):
     return v
   # Stop moving if the goal is reached.
   if np.linalg.norm(position - path_points[-1]) < .1:
-    print('Reached goal from get_velocity')
+    # print('Reached goal from get_velocity')
     return v
 
   # MISSING: Return the velocity needed to follow the
@@ -211,37 +244,6 @@ class Frontier(object):
     def _update(self, pose):
       pass
 
-    def _line(start, end):
-      "Bresenham's line algorithm"
-      x0, y0 = start
-      x1, y1 = end
-      line = []
-      dx = abs(x1 - x0)
-      dy = abs(y1 - y0)
-      x, y = x0, y0
-      sx = -1 if x0 > x1 else 1
-      sy = -1 if y0 > y1 else 1
-      if dx > dy:
-        err = dx / 2.0
-        while x != x1:
-          line.append((x, y))
-          err -= dy
-          if err < 0:
-            y += sy
-            err += dx
-          x += sx
-      else:
-        err = dy / 2.0
-        while y != y1:
-          line.append((x, y))
-          err -= dx
-          if err < 0:
-            x += sx
-            err += dy
-          y += sy
-      line.append((x, y))
-      return line
-
     def _get_neighbours(point):
       i,j = point
       neighbours = []
@@ -269,8 +271,18 @@ class Frontier(object):
     # Extract positions where sensor laser hits
     laser_ranges = []
     for i, d in enumerate(msg.ranges):
-      if np.isinf(d): # TODO
+      # Special case of points that are out of range and non-occluded
+      if np.isinf(d):
+        d = 3.0
+        angle = msg.angle_min + i * msg.angle_increment + self._slam.pose[YAW]
+        x = self._slam.pose[X] + np.cos(angle) * d
+        y = self._slam.pose[Y] + np.sin(angle) * d
+        i, j = self._occupancy_grid.get_index((x, y))
+        points_in_range = line(self._occupancy_grid.get_index(self._slam.pose[:2]), (i,j))
+        for point in points_in_range:
+          self._slam.occupancy_grid.values[point] = FREE
         continue
+
       angle = msg.angle_min + i * msg.angle_increment + self._slam.pose[YAW]
       x = self._slam.pose[X] + np.cos(angle) * d
       y = self._slam.pose[Y] + np.sin(angle) * d
@@ -280,7 +292,7 @@ class Frontier(object):
     contour = []
     prev = laser_ranges.pop(0)
     for point in laser_ranges:
-      contour.extend(_line(prev, point))
+      contour.extend(line(prev, point))
       prev = point
 
     # Detecting new frontiers from contour
@@ -331,7 +343,7 @@ class Frontier(object):
 
     for frontier in self._frontiers:
       for point in frontier:
-        if not _is_frontier_point(point):
+        if x_min <= point[0] <= x_max and y_min <= point[1] <= y_max and _is_frontier_point(point):
           frontier.remove(point)
 
     # Old frontier
@@ -361,6 +373,25 @@ class Frontier(object):
       new_frontiers = rest
     self._frontiers = list(self._frontiers)
 
+  def remove_point(self, point):
+    point = self._occupancy_grid.get_index(point)
+    for frontier in self._frontiers:
+      if point in frontier:
+        for i in [-1, 0, 1]:
+          for j in [-1, 0, 1]:
+            if self._occupancy_grid.values[point[X] + i, point[Y] + j] == UNKNOWN:
+              self._occupancy_grid.values[point[X] + i, point[Y] + j] = FREE
+        frontier.remove(point)
+        break
+
+  def remove_frontier_containing_point(self, point):
+    point = self._occupancy_grid.get_index(point)
+    for i in range(-4, 5):
+      for j in range(-4, 5):
+        for frontier in self._frontiers:
+          if (point[X] + i, point[Y] + j) in frontier:
+            self._frontiers.remove(frontier)
+            break
 
   @property
   def frontiers(self):
@@ -429,9 +460,108 @@ def get_path_smart(final_node):
   return zip(points_x, points_y), path[1:]
 
 
-def update_robot_assignment(frontier, pose):
+def calculate_cost_to_each_cell(frontiers, slam):
+  occupancy_grid_costs = np.ones_like(slam.occupancy_grid.values) * np.inf
+  robot_index = slam.occupancy_grid.get_index(slam.pose[:2])
+  occupancy_grid_costs[robot_index] = 0
+
+  print(slam.occupancy_grid.values[robot_index])
+  MAX_ITERATIONS = 1
+  for _ in range(MAX_ITERATIONS):
+    print(_)
+    converged = True
+
+    x = y = 0
+    dx = 0
+    dy = -1
+    for dummy in range(max(robot_index[0], occupancy_grid_costs.shape[0] - robot_index[0] - 1, robot_index[1], occupancy_grid_costs.shape[1] - robot_index[1] - 1) ** 2):
+      if (-robot_index[0] < x < occupancy_grid_costs.shape[0] - robot_index[0] - 1) and \
+              (-robot_index[1] < y < occupancy_grid_costs.shape[1] - robot_index[1] - 1):
+        i = robot_index[0] + x
+        j = robot_index[1] + y
+        # print("The coordinates checked by spiral are " + str((i, j)))
+        reach_neighbours_cost = []
+        for di in [-1, 0, 1]:
+          for dj in [-1, 0 , 1]:
+            if FREE == slam.occupancy_grid.values[i+di, j+dj]:
+              # print("IF recalculate")
+              reach_neighbours_cost.append(occupancy_grid_costs[i+di, j+dj] +
+                                         np.sqrt(di**2 + dj**2))
+        # print(occupancy_grid_costs[robot_index[0],robot_index[1]+1])
+        if len(reach_neighbours_cost)>0 and occupancy_grid_costs[i,j] != min(reach_neighbours_cost):
+          converged = False
+          occupancy_grid_costs[i,j] = min(reach_neighbours_cost)
+      if x == y or (x < 0 and x == -y) or (x > 0 and x == 1 - y):
+        dx, dy = -dy, dx
+      x, y = x + dx, y + dy
+    if converged:
+      print('Converged ')
+      break
+
+  frontier_costs = dict()
+  for frontier in frontiers:
+    for point in frontier:
+      frontier_costs[point] = occupancy_grid_costs[point]
+  return frontier_costs
+
+
+def initialise_utility_to_each_cell(frontiers, slam):
+  frontier_utilities = {point:1 for frontier in frontiers for point in frontier}
+  return frontier_utilities
+
+def check_if_obstacle_on_line(start, end, occupancy_grid):
+  points_on_line = line(start, end)
+  for point in points_on_line:
+    if occupancy_grid.values[point] == OCCUPIED:
+      return True
+  return False
+
+
+def assign_goal(robot, goal, goal_position):
+  goal.position[X] = goal_position[X]
+  goal.position[Y] = goal_position[Y]
+  print('Assigned new goal position:', goal_position)
+  global may_change_path
+  may_change_path = True
+
+
+def update_robot_assignment(frontier, slam, goal):
+  robots_left = [0]
+
+  #TODO change goal to be a list of the goals assigned to each robot, slam to be robot specific for not centralised base
   frontiers = frontier.frontiers
-  pass
+  frontier_costs = calculate_cost_to_each_cell(frontiers, slam)
+  frontier_costs = {0:frontier_costs} #TODO
+  frontier_utilities = initialise_utility_to_each_cell(frontiers, slam)
+
+  beta = 1
+  while len(robots_left) > 0:
+    utility_minus_cost = -np.inf
+    assigned_frontier_point = None
+    assigned_robot = None
+    for point in frontier_utilities.keys():
+      for robot in robots_left:
+        if utility_minus_cost < frontier_utilities[point] - beta * frontier_costs[robot][point]:
+          assigned_frontier_point = point
+          assigned_robot = robot
+          utility_minus_cost = frontier_utilities[point] - beta * frontier_costs[robot][point]
+
+    if assigned_frontier_point is None:
+      # If no more frontier points, move around randomly
+      random_angle = np.random.uniform(0, 2*np.pi)
+      random_distance = 0.5
+      random_direction = (np.cos(random_angle), np.sin(random_angle))
+      assign_goal(assigned_robot, goal, (slam.pose[X] + random_distance * np.cos(random_angle), slam.pose[Y] + random_distance * np.sin(random_angle)))
+      return
+    for point in frontier_utilities.keys():
+      if not check_if_obstacle_on_line(point, assigned_frontier_point, slam.occupancy_grid):
+        distance = np.linalg.norm(slam.occupancy_grid.get_position(point[X], point[Y]) - slam.occupancy_grid.get_position(assigned_frontier_point[X], assigned_frontier_point[Y]))
+        if distance < 3:
+          frontier_utilities[point] -= 1 - distance/3.0
+
+    assign_goal(assigned_robot, goal, slam.occupancy_grid.get_position(assigned_frontier_point[X], assigned_frontier_point[Y]))
+    robots_left.remove(assigned_robot)
+
 
 
 def run(args):
@@ -504,12 +634,13 @@ def run(args):
 
     frame_id += 1
 
-    goal_reached = np.linalg.norm(slam.pose[:2] - goal.position) < .2
+    goal_reached = np.linalg.norm(slam.pose[:2] - goal.position) < .3
     if goal_reached:
       publisher.publish(stop_msg)
       current_path = []
       rate_limiter.sleep()
-      update_robot_assignment(frontier, slam.pose)
+      frontier.remove_point((goal.position[X], goal.position[Y]))
+      update_robot_assignment(frontier, slam, goal)
       continue
 
     # Follow path using feedback linearization.
@@ -554,6 +685,8 @@ def run(args):
     if not current_path:
       may_change_path = True
       print('Unable to reach goal position:', goal.position)
+      frontier.remove_frontier_containing_point((goal.position[X], goal.position[Y]))
+      update_robot_assignment(frontier, slam, goal)
 
     rate_limiter.sleep()
     previous_time = rospy.Time.now().to_sec()
