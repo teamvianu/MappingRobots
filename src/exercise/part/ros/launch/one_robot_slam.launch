@@ -4,7 +4,7 @@
   <arg name="configuration_basename" default="turtlebot3_lds_2d.lua"/>
   <arg name="set_base_frame" default="base_footprint"/>
   <arg name="set_odom_frame" default="odom"/>
-  <arg name="set_map_frame"  default="map"/>
+  <arg name="set_map_frame"  default="/map"/>
   <arg name="tf_prefix" default=""/>
 
   <!-- TurtleBot3 -->
@@ -15,7 +15,7 @@
     <param name="publish_frequency" type="double" value="50.0" />
     <param name="tf_prefix" value="$(arg tf_prefix)"/>
   </node>
-  <node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 map $(arg tf_prefix)/occupancy_grid 100"/>
+  <node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 /map $(arg tf_prefix)/occupancy_grid 100"/>
 
   <!-- SLAM: Gmapping -->
   <node pkg="gmapping" type="slam_gmapping" name="turtlebot3_slam_gmapping" output="screen">

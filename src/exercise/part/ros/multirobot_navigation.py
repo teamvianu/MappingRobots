@@ -184,14 +184,16 @@ class Robot(object):
 
 	def start(self):
 		def _update_robot_assignment():
-			frontiers = itertools.chain.from_iterable((robot.frontier.frontiers for robot in robots))
+			# TODO change frontiers to global frontiers and occupancy grid to global occupancy grid
+			# frontiers = itertools.chain.from_iterable((robot.frontier.frontiers for robot in robots))
+			frontiers = self._frontier.frontiers
 			frontier_costs = calculate_cost_to_each_cell(frontiers, self._slam, self._slam.occupancy_grid)
 			frontier_utilities = initialise_utility_to_each_cell(frontiers)
 
 			# Reduce points' utilities in the range of the already assigned goal positions
 			for point in frontier_utilities.keys():
 				for robot in robots:
-					if robot == self:
+					if robot == self or not robot.goal.ready:
 						continue
 					if not check_if_obstacle_on_line(point, robot.goal.position, self._slam.occupancy_grid):
 						distance = np.linalg.norm(
@@ -202,15 +204,17 @@ class Robot(object):
 
 			utility_minus_cost = -np.inf
 			assigned_frontier_point = None
-			for point in frontiers:
-				if utility_minus_cost < frontier_utilities[point] - beta * frontier_costs[point]:
-					assigned_frontier_point = point
-					utility_minus_cost = frontier_utilities[point] - beta * frontier_costs[point]
+			for frontier in frontiers:
+				for point in frontier:
+					if utility_minus_cost < frontier_utilities[point] - beta * frontier_costs[point]:
+						assigned_frontier_point = point
+						utility_minus_cost = frontier_utilities[point] - beta * frontier_costs[point]
 
 			if assigned_frontier_point is None:
+				print("Robot " + self._name + " doesn't have a frontier point to go to")
 				# If no more frontier points, move around randomly
 				random_angle = np.random.uniform(0, 2 * np.pi)
-				random_distance = 2
+				random_distance = 1
 				self.assign_goal((self._slam.pose[X] + random_distance * np.cos(random_angle),
 				             self._slam.pose[Y] + random_distance * np.sin(random_angle)))
 				return
@@ -284,10 +288,10 @@ class Robot(object):
 			print("Robot " + self._name + " finished finding new path in " + str(end_rrt-start_rrt))
 
 			if not self._current_path:
-				self._may_change_path = True
 				print("Robot " + self._name + ' is unable to reach goal position:', self._goal.position)
 				self._frontier.remove_frontier_containing_point((self._goal.position[X], self._goal.position[Y]))
 				_update_robot_assignment()
+				self._may_change_path = True
 
 			rate_limiter.sleep()
 			previous_time = rospy.Time.now().to_sec()
@@ -402,10 +406,17 @@ class Frontier(object):
 		self._frontiers = []
 		self._slam = robot.slam
 		self._occupancy_grid = robot.slam.occupancy_grid
+		self._robot = robot
 
 	def callback(self, msg):
 		# Helper that updates the frontiers
 		self._occupancy_grid = self._slam.occupancy_grid
+		if not self._slam.ready:
+			print("Robot " + self._robot.name + " slam is not ready")
+			return
+		# print("Robot " + self._robot.name + " occupancy grid is " + str(self._occupancy_grid.values[:10]))
+		# print("Robot " + self._robot.name + " frontier is " + str(self._frontiers[:10]))
+		# print(self._occupancy_grid.values[self._occupancy_grid.get_index(self._robot.slam.pose[:2])])
 
 		def _get_neighbours(point):
 			i, j = point
@@ -507,7 +518,7 @@ class Frontier(object):
 
 		for frontier in self._frontiers:
 			for point in frontier:
-				if not _is_frontier_point(point):
+				if not _is_frontier_point(point) and x_min <= point[0] <= x_max and y_min <= point[1] <= y_max:
 					frontier.remove(point)
 
 		# Old frontier
@@ -704,9 +715,11 @@ def initialise_robots_goals_assignment(robots):
 
 		if assigned_frontier_point is None:
 			# If no more frontier points, move around randomly
+			print("No more frontier points to go to at initial goals assignment")
 			random_angle = np.random.uniform(0, 2 * np.pi)
-			random_distance = 0.5
+			random_distance = 1
 			for robot in robots_copy:
+				print("Robot " + robot.name + " doesn't have a frontier point to go to")
 				robot.assign_goal((robot.slam.pose[X] + random_distance * np.cos(random_angle),
 				                   robot.slam.pose[Y] + random_distance * np.sin(random_angle)))
 			return
@@ -728,23 +741,23 @@ def run(args):
 	global rate_limiter
 	rate_limiter = rospy.Rate(100)
 
+	global robots
 	robot1 = Robot("robot1")
 	robot2 = Robot("robot2")
-
-	global robots
 	robots = [robot1, robot2]
-	frame_id = 0
-	previous_time = rospy.Time.now().to_sec()
 
-	path_publisher = rospy.Publisher('path', Path, queue_size=1)
-	frontier_publisher = rospy.Publisher('frontier', PointCloud, queue_size=1)
+	frame_id = 0
+	path_publishers = dict()
+	frontier_publishers = dict()
+	for robot in robots:
+		path_publishers[robot] = rospy.Publisher('/' + robot.name + '/path', Path, queue_size=1)
+		frontier_publishers[robot] = rospy.Publisher('/' + robot.name + '/frontier', PointCloud, queue_size=1)
 
 	# Stop moving message.
 	global stop_msg
 	stop_msg = Twist()
 	stop_msg.linear.x = 0.
 	stop_msg.angular.z = 0.
-
 
 	for robot in robots:
 		t = Thread(target=robot.start, args=())
@@ -757,12 +770,13 @@ def run(args):
 
 	initialise_robots_goals_assignment(robots)
 	while not rospy.is_shutdown():
+
 		# Publish frontier to RViz.
-		frontier_msg = PointCloud()
-		frontier_msg.header.seq = frame_id
-		frontier_msg.header.stamp = rospy.Time.now()
-		frontier_msg.header.frame_id = 'odom'
 		for robot in robots:
+			frontier_msg = PointCloud()
+			frontier_msg.header.seq = frame_id
+			frontier_msg.header.stamp = rospy.Time.now()
+			frontier_msg.header.frame_id = '/' + robot.prefix + '/odom'
 			for f in robot.frontier.frontiers:
 				for u in f:
 					v = robot.slam.occupancy_grid.get_position(u[0], u[1])
@@ -771,14 +785,14 @@ def run(args):
 					frontier_pt.y = v[1]
 					frontier_pt.z = 1
 					frontier_msg.points.append(frontier_pt)
-		frontier_publisher.publish(frontier_msg)
+			frontier_publishers[robot].publish(frontier_msg)
 
 		# Publish path to RViz.
-		path_msg = Path()
-		path_msg.header.seq = frame_id
-		path_msg.header.stamp = rospy.Time.now()
-		path_msg.header.frame_id = 'map'
 		for robot in robots:
+			path_msg = Path()
+			path_msg.header.seq = frame_id
+			path_msg.header.stamp = rospy.Time.now()
+			path_msg.header.frame_id = 'map'
 			for point_on_path in robot.current_path:
 				pose_msg = PoseStamped()
 				pose_msg.header.seq = frame_id
@@ -787,7 +801,7 @@ def run(args):
 				pose_msg.pose.position.x = point_on_path[X]
 				pose_msg.pose.position.y = point_on_path[Y]
 				path_msg.poses.append(pose_msg)
-		path_publisher.publish(path_msg)
+			path_publishers[robot].publish(path_msg)
 
 		frame_id += 1
 		rate_limiter.sleep()
