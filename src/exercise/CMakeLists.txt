@@ -113,6 +113,7 @@ include_directories(
 
 catkin_install_python(PROGRAMS
   part/ros/rrt_navigation.py
+  part/ros/multirobot_navigation.py
   part/python/rrt.py
   part/python/rrt_improved.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

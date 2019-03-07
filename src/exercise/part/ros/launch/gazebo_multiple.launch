@@ -1,0 +1,16 @@
+<launch>
+  <arg name="use_gui" default="true"/>
+
+  <!-- start world and gui -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find exercise)/part/ros/worlds/house.world"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="$(arg use_gui)"/>
+    <arg name="headless" value="false"/>
+    <arg name="debug" value="false"/>
+  </include>
+
+  <!-- include our robots -->
+  <include file="$(find exercise)/part/ros/launch/robots.launch"/>
+</launch>

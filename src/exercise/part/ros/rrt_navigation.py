@@ -343,7 +343,7 @@ class Frontier(object):
 
     for frontier in self._frontiers:
       for point in frontier:
-        if x_min <= point[0] <= x_max and y_min <= point[1] <= y_max and _is_frontier_point(point):
+        if not _is_frontier_point(point):
           frontier.remove(point)
 
     # Old frontier

@@ -1,0 +1,25 @@
+<launch>
+  <!-- Arguments -->
+  <arg name="slam_methods" default="gmapping" doc="slam type [gmapping]"/>
+  <arg name="open_rviz" default="true"/>
+
+  <!-- Robot 1 -->
+  <group ns="robot1">
+    <include file="$(find exercise)/part/ros/launch/one_robot_slam.launch" >
+      <arg name="tf_prefix" value="robot1_tf" />
+    </include>
+  </group>
+
+  <!-- Robot 2 -->
+  <group ns="robot2">
+    <include file="$(find exercise)/part/ros/launch/one_robot_slam.launch" >
+      <arg name="tf_prefix" value="robot2_tf" />
+    </include>
+  </group>
+
+  <!-- rviz -->
+  <group if="$(arg open_rviz)">
+    <node pkg="rviz" type="rviz" name="rviz" required="true"
+      args="-d $(find turtlebot3_slam)/rviz/turtlebot3_$(arg slam_methods).rviz"/>
+  </group>
+</launch>
