@@ -1,0 +1,5 @@
+<launch>
+	<arg name="mode" />
+
+	<node pkg="exercise" type="multirobot_navigation.py" name="multirobot_navigation" output="screen" args="/robot1/global_map_robot1 /robot2/global_map_robot2"></node>
+</launch>

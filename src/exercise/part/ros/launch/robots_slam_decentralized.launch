@@ -8,6 +8,8 @@
     <include file="$(find exercise)/part/ros/launch/one_robot_slam.launch" >
       <arg name="tf_prefix" value="robot1_tf" />
     </include>
+
+    <node name="robot1_map_merger" pkg="exercise" type="map_merge.py" args="/map /robot1/global_map_robot1" respawn="true"/>
   </group>
 
   <!-- Robot 2 -->
@@ -15,9 +17,9 @@
     <include file="$(find exercise)/part/ros/launch/one_robot_slam.launch" >
       <arg name="tf_prefix" value="robot2_tf" />
     </include>
-  </group>
 
-  <node name="map_merger" pkg="exercise" type="map_merge.py" args="map global_map" respawn="true"/>
+    <node name="robot2_map_merger" pkg="exercise" type="map_merge.py" args="/map /robot2/global_map_robot2" respawn="true"/>
+  </group>
 
   <!-- rviz -->
   <group if="$(arg open_rviz)">
