@@ -61,6 +61,8 @@ OCCUPIED = 2
 # Beta in the goal assignment algorithm
 beta = 1
 
+frontiers = []
+
 
 def line(start, end):
 	"Bresenham's line algorithm"
@@ -175,52 +177,60 @@ class Robot(object):
 		self._frontier = Frontier(self)
 		self._current_path = []
 		self._may_change_path = True
+		self._max_distance = 5
+		self._random_walking = False
+
+	def _update_robot_assignment(self):
+		print("Robot " + self._name + " is searching a frontier point to go to")
+		# frontiers = itertools.chain.from_iterable((robot.frontier.frontiers for robot in robots))
+		frontier_costs = calculate_cost_to_each_cell(self._slam, self._slam.occupancy_grid)
+		frontier_utilities = initialise_utility_to_each_cell()
+		print("Robot " + self._name + " after calculating costs of frontier")
+
+		# Reduce points' utilities in the range of the already assigned goal positions
+		# for point in frontier_utilities.keys():
+		# 	for robot in robots:
+		# 		if robot == self or not robot.goal.ready:
+		# 			continue
+		# 		if not check_if_obstacle_on_line(point, robot.goal.position, self._slam.occupancy_grid):
+		# 			distance = np.linalg.norm(
+		# 				self._slam.occupancy_grid.get_position(point[X], point[Y]) - self._slam.occupancy_grid.get_position(
+		# 					robot.goal.position[X], robot.goal.position[Y]))
+		# 			if distance < 3:
+		# 				frontier_utilities[point] -= 1 - distance / 3.0
+
+		print("Robot " + self._name + " after reduced utilities")
+		utility_minus_cost = -np.inf
+		assigned_frontier_point = None
+		for point in frontier_utilities.keys():
+			if point in frontier_costs and utility_minus_cost < frontier_utilities[point] - beta * frontier_costs[point]:
+				assigned_frontier_point = point
+				utility_minus_cost = frontier_utilities[point] - beta * frontier_costs[point]
+
+		print("Robot " + self._name + " after choosing assigned_frontier_point")
+		if assigned_frontier_point is None:
+			print("Robot " + self._name + " doesn't have a frontier point to go to")
+			# If no more frontier points, move around randomly
+			random_angle = np.random.uniform(0, 2 * np.pi)
+			random_distance = 0.75
+			self.assign_goal((self._slam.pose[X] + random_distance * np.cos(random_angle),
+			             self._slam.pose[Y] + random_distance * np.sin(random_angle)))
+			self._random_walking = True
+			return
+
+		self._random_walking = False
+		self.assign_goal(self._slam.occupancy_grid.get_position(assigned_frontier_point[X], assigned_frontier_point[Y]))
 
 	def assign_goal(self, goal_position):
+		if np.isnan(goal_position[X]) or np.isnan(goal_position[Y]):
+			rate_limiter.sleep()
+			self._update_robot_assignment()
 		self._goal.position[X] = goal_position[X]
 		self._goal.position[Y] = goal_position[Y]
 		print('Assigned ' + self._name + ' new goal position: ', goal_position)
 		self._may_change_path = True
 
 	def start(self):
-		def _update_robot_assignment():
-			# TODO change frontiers to global frontiers and occupancy grid to global occupancy grid
-			# frontiers = itertools.chain.from_iterable((robot.frontier.frontiers for robot in robots))
-			frontiers = self._frontier.frontiers
-			frontier_costs = calculate_cost_to_each_cell(frontiers, self._slam, self._slam.occupancy_grid)
-			frontier_utilities = initialise_utility_to_each_cell(frontiers)
-
-			# Reduce points' utilities in the range of the already assigned goal positions
-			for point in frontier_utilities.keys():
-				for robot in robots:
-					if robot == self or not robot.goal.ready:
-						continue
-					if not check_if_obstacle_on_line(point, robot.goal.position, self._slam.occupancy_grid):
-						distance = np.linalg.norm(
-							self._slam.occupancy_grid.get_position(point[X], point[Y]) - self._slam.occupancy_grid.get_position(
-								robot.goal.position[X], robot.goal.position[Y]))
-						if distance < 3:
-							frontier_utilities[point] -= 1 - distance / 3.0
-
-			utility_minus_cost = -np.inf
-			assigned_frontier_point = None
-			for frontier in frontiers:
-				for point in frontier:
-					if utility_minus_cost < frontier_utilities[point] - beta * frontier_costs[point]:
-						assigned_frontier_point = point
-						utility_minus_cost = frontier_utilities[point] - beta * frontier_costs[point]
-
-			if assigned_frontier_point is None:
-				print("Robot " + self._name + " doesn't have a frontier point to go to")
-				# If no more frontier points, move around randomly
-				random_angle = np.random.uniform(0, 2 * np.pi)
-				random_distance = 1
-				self.assign_goal((self._slam.pose[X] + random_distance * np.cos(random_angle),
-				             self._slam.pose[Y] + random_distance * np.sin(random_angle)))
-				return
-
-			self.assign_goal(self._slam.occupancy_grid.get_position(assigned_frontier_point[X], assigned_frontier_point[Y]))
-
 
 		# Make sure the robot is stopped.
 		i = 0
@@ -241,13 +251,16 @@ class Robot(object):
 				rate_limiter.sleep()
 				continue
 
-			goal_reached = np.linalg.norm(self._slam.pose[:2] - self._goal.position) < .3
+			goal_reached = np.linalg.norm(self._slam.pose[:2] - self._goal.position) < .32
 			if goal_reached:
+				print("Goal reached")
+				if not self._random_walking:
+					self._max_distance = 5
 				self._publisher.publish(stop_msg)
-				current_path = []
+				self._current_path = []
 				rate_limiter.sleep()
-				self._frontier.remove_point((self._goal.position[X], self._goal.position[Y]))
-				_update_robot_assignment()
+				self._frontier.remove_frontier_containing_point((self._goal.position[X], self._goal.position[Y]))
+				self._update_robot_assignment()
 				continue
 
 			# Follow path using feedback linearization.
@@ -275,13 +288,13 @@ class Robot(object):
 			# Run RRT smart.
 			print("Robot " + self._name + " is finding a new path")
 			start_rrt = time.time()
-			start_node, final_node = rrt_smart.rrt(self._slam.pose, self._goal.position, self._slam.occupancy_grid)
-			# end_rrt = time.time()
-			# print("It took RRT " + str(end_rrt - start_rrt) + " flippin seconds to finish")
-			# start_rrt = time.time()
+			start_node, final_node = rrt_smart.rrt(self._slam.pose, self._goal.position, self._max_distance, self._slam.occupancy_grid)
+			end_rrt = time.time()
+			print("It took RRT " + str(end_rrt - start_rrt) + " flippin seconds to finish")
+			start_rrt = time.time()
 			start_node, final_node = rrt_smart.rrt_smart(start_node, final_node, self._slam.occupancy_grid)
 			end_rrt = time.time()
-			# print("It took RRT smartypants " + str(end_rrt - start_rrt) + " flippin seconds to finish")
+			print("It took RRT smartypants " + str(end_rrt - start_rrt) + " flippin seconds to finish")
 			# print(self._current_path)
 			self._current_path = get_path_smart(final_node)
 			# print(self._current_path)
@@ -290,8 +303,14 @@ class Robot(object):
 			if not self._current_path:
 				print("Robot " + self._name + ' is unable to reach goal position:', self._goal.position)
 				self._frontier.remove_frontier_containing_point((self._goal.position[X], self._goal.position[Y]))
-				_update_robot_assignment()
+				if not self._random_walking:
+					self._max_distance *= 2
+				random_angle = np.random.uniform(0, 2 * np.pi)
+				random_distance = 1
+				self.assign_goal((self._slam.pose[X] + random_distance * np.cos(random_angle),
+				                  self._slam.pose[Y] + random_distance * np.sin(random_angle)))
 				self._may_change_path = True
+				self._random_walking = True
 
 			rate_limiter.sleep()
 			previous_time = rospy.Time.now().to_sec()
@@ -403,12 +422,13 @@ class GoalPose(object):
 class Frontier(object):
 	def __init__(self, robot):
 		rospy.Subscriber("/" + robot.name + '/scan', LaserScan, self.callback)
-		self._frontiers = []
+		# self._frontiers = []
 		self._slam = robot.slam
 		self._occupancy_grid = robot.slam.occupancy_grid
 		self._robot = robot
 
 	def callback(self, msg):
+		global frontiers
 		# Helper that updates the frontiers
 		self._occupancy_grid = self._slam.occupancy_grid
 		if not self._slam.ready:
@@ -448,14 +468,14 @@ class Frontier(object):
 		for i, d in enumerate(msg.ranges):
 			# Special case of points that are out of range and non-occluded
 			if np.isinf(d):
-				d = 3.0
-				angle = msg.angle_min + i * msg.angle_increment + self._slam.pose[YAW]
-				x = self._slam.pose[X] + np.cos(angle) * d
-				y = self._slam.pose[Y] + np.sin(angle) * d
-				i, j = self._occupancy_grid.get_index((x, y))
-				points_in_range = line(self._occupancy_grid.get_index(self._slam.pose[:2]), (i, j))
-				for point in points_in_range:
-					self._slam.occupancy_grid.values[point] = FREE
+				# d = 3.0 #TODO uncomment this block
+				# angle = msg.angle_min + i * msg.angle_increment + self._slam.pose[YAW]
+				# x = self._slam.pose[X] + np.cos(angle) * d
+				# y = self._slam.pose[Y] + np.sin(angle) * d
+				# i, j = self._occupancy_grid.get_index((x, y))
+				# points_in_range = line(self._occupancy_grid.get_index(self._slam.pose[:2]), (i, j))
+				# for point in points_in_range:
+				# 	self._slam.occupancy_grid.values[point] = FREE
 				continue
 
 			angle = msg.angle_min + i * msg.angle_increment + self._slam.pose[YAW]
@@ -503,7 +523,7 @@ class Frontier(object):
 			y_max = y_max if y_max > point[1] else point[1]
 
 		# Eliminating previously detected frontiers
-		frontiers_copy = list(self._frontiers)
+		frontiers_copy = list(frontiers)
 		for frontier in frontiers_copy:
 			points_indexes_to_split = [-1]
 			for point in frontier:
@@ -511,25 +531,26 @@ class Frontier(object):
 					points_indexes_to_split.append(frontier.index(point))
 
 			points_indexes_to_split.append(len(frontier))
-			self._frontiers.extend([frontier[points_indexes_to_split[i] + 1:points_indexes_to_split[i + 1] + 1] for i in
-			                        range(len(points_indexes_to_split) - 1)])
-			self._frontiers.remove(frontier)
-		self._frontiers = filter(None, self._frontiers)  # Erase empty lists
+			if frontier in frontiers:
+				frontiers.extend([frontier[points_indexes_to_split[i] + 1:points_indexes_to_split[i + 1] + 1] for i in
+				                        range(len(points_indexes_to_split) - 1)])
+				frontiers.remove(frontier)
+		frontiers = filter(None, frontiers)  # Erase empty lists
 
-		for frontier in self._frontiers:
+		for frontier in frontiers:
 			for point in frontier:
 				if not _is_frontier_point(point) and x_min <= point[0] <= x_max and y_min <= point[1] <= y_max:
 					frontier.remove(point)
 
 		# Old frontier
 		point_to_frontier = {}
-		for frontier in self._frontiers:
+		for frontier in frontiers:
 			for point in frontier:
 				point_to_frontier[point] = frontier
 
 		# Storing new detected frontiers
-		new_frontiers.extend(self._frontiers)
-		self._frontiers = []
+		new_frontiers.extend(frontiers)
+		frontiers_copy = []
 		while len(new_frontiers) > 0:
 			first, rest = new_frontiers[0], new_frontiers[1:]
 			first = set(first)
@@ -543,13 +564,14 @@ class Frontier(object):
 					else:
 						rest2.append(r)
 				rest = rest2
-			self._frontiers.append(list(first))
+			frontiers_copy.append(list(first))
 			new_frontiers = rest
-		self._frontiers = list(self._frontiers)
+		frontiers = list(frontiers_copy)
 
 	def remove_point(self, point):
+		print("Removed point")
 		point = self._occupancy_grid.get_index(point)
-		for frontier in self._frontiers:
+		for frontier in frontiers:
 			if point in frontier:
 				for i in [-1, 0, 1]:
 					for j in [-1, 0, 1]:
@@ -559,24 +581,32 @@ class Frontier(object):
 				break
 
 	def remove_frontier_containing_point(self, point):
-		point = self._occupancy_grid.get_index(point)
+		print("Removed frontier")
+		global frontiers
+		if self._slam.occupancy_grid is None:
+			for frontier in frontiers:
+				if point in frontier:
+					frontiers.remove(frontier)
+			return
+		point = self._slam.occupancy_grid.get_index(point)
 		for i in range(-4, 5):
 			for j in range(-4, 5):
-				for frontier in self._frontiers:
+				for frontier in frontiers:
 					if (point[X] + i, point[Y] + j) in frontier:
-						self._frontiers.remove(frontier)
+						frontiers.remove(frontier)
 						break
 
 	@property
 	def frontiers(self):
-		return self._frontiers
+		global frontiers
+		return frontiers
 
 
 def get_path(final_node):
 	# Construct path from RRT solution.
 	if final_node is None:
 		return []
-	path_reversed = []
+	path_reversed = list()
 	path_reversed.append(final_node)
 	while path_reversed[-1].parent is not None:
 		path_reversed.append(path_reversed[-1].parent)
@@ -616,7 +646,7 @@ def get_path_smart(final_node):
 	# Construct path from RRT solution.
 	if final_node is None:
 		return []
-	path_reversed = []
+	path_reversed = list()
 	path_reversed.append(final_node)
 	while path_reversed[-1].parent is not None:
 		path_reversed.append(path_reversed[-1].parent)
@@ -634,7 +664,7 @@ def get_path_smart(final_node):
 	return zip(points_x, points_y)
 
 
-def calculate_cost_to_each_cell(frontiers, slam, occupancy_grid):
+def calculate_cost_to_each_cell_2(frontiers, slam, occupancy_grid):
 	occupancy_grid_costs = np.ones_like(occupancy_grid.values) * np.inf
 	robot_index = occupancy_grid.get_index(slam.pose[:2])
 	occupancy_grid_costs[robot_index] = 0
@@ -659,8 +689,7 @@ def calculate_cost_to_each_cell(frontiers, slam, occupancy_grid):
 					for dj in [-1, 0, 1]:
 						if FREE == occupancy_grid.values[i + di, j + dj]:
 							# print("IF recalculate")
-							reach_neighbours_cost.append(occupancy_grid_costs[i + di, j + dj] +
-							                             np.sqrt(di ** 2 + dj ** 2))
+							reach_neighbours_cost.append(occupancy_grid_costs[i + di, j + dj] + np.sqrt(di ** 2 + dj ** 2))
 				# print(occupancy_grid_costs[robot_index[0],robot_index[1]+1])
 				if len(reach_neighbours_cost) > 0 and occupancy_grid_costs[i, j] != min(reach_neighbours_cost):
 					converged = False
@@ -679,7 +708,15 @@ def calculate_cost_to_each_cell(frontiers, slam, occupancy_grid):
 	return frontier_costs
 
 
-def initialise_utility_to_each_cell(frontiers):
+def calculate_cost_to_each_cell(slam, occupancy_grid):
+	frontier_costs = dict()
+	for frontier in frontiers:
+		for point in frontier:
+			frontier_costs[point] = np.linalg.norm(slam.pose[:2] - occupancy_grid.get_position(point[0], point[1]))
+	return frontier_costs
+
+
+def initialise_utility_to_each_cell():
 	frontier_utilities = {point: 1 for frontier in frontiers for point in frontier}
 	return frontier_utilities
 
@@ -695,12 +732,11 @@ def check_if_obstacle_on_line(start, end, occupancy_grid):
 def initialise_robots_goals_assignment(robots):
 	robots_copy = list(robots)
 
-	frontiers = itertools.chain.from_iterable((robot.frontier.frontiers for robot in robots))
-	# TODO change the frontiers and occupancy_grid to the global ones
-	frontier_costs = {robot: calculate_cost_to_each_cell(frontiers, robot.slam, robot.slam.occupancy_grid) for robot in robots}
+	# frontiers = itertools.chain.from_iterable((robot.frontier.frontiers for robot in robots))
+	frontier_costs = {robot: calculate_cost_to_each_cell(robot.slam, robot.slam.occupancy_grid) for robot in robots}
 
-	frontier_utilities = initialise_utility_to_each_cell(frontiers)
-	occupancy_grid =  robots[0].slam.occupancy_grid # TODO change occupancy_grid to global one
+	frontier_utilities = initialise_utility_to_each_cell()
+	occupancy_grid =  robots[0].slam.occupancy_grid
 	beta = 1
 	while len(robots_copy) > 0:
 		utility_minus_cost = -np.inf
@@ -708,7 +744,7 @@ def initialise_robots_goals_assignment(robots):
 		assigned_robot = None
 		for point in frontier_utilities.keys():
 			for robot in robots_copy:
-				if utility_minus_cost < frontier_utilities[point] - beta * frontier_costs[robot][point]:
+				if point in frontier_costs[robot] and utility_minus_cost < frontier_utilities[point] - beta * frontier_costs[robot][point]:
 					assigned_frontier_point = point
 					assigned_robot = robot
 					utility_minus_cost = frontier_utilities[point] - beta * frontier_costs[robot][point]
@@ -717,7 +753,7 @@ def initialise_robots_goals_assignment(robots):
 			# If no more frontier points, move around randomly
 			print("No more frontier points to go to at initial goals assignment")
 			random_angle = np.random.uniform(0, 2 * np.pi)
-			random_distance = 1
+			random_distance = 0.2
 			for robot in robots_copy:
 				print("Robot " + robot.name + " doesn't have a frontier point to go to")
 				robot.assign_goal((robot.slam.pose[X] + random_distance * np.cos(random_angle),
@@ -741,6 +777,9 @@ def run(args):
 	global rate_limiter
 	rate_limiter = rospy.Rate(100)
 
+	global frontiers
+	frontiers = []
+
 	global robots
 	robot1 = Robot("robot1", args.map_topic[0])
 	robot2 = Robot("robot2", args.map_topic[1])
@@ -751,7 +790,7 @@ def run(args):
 	frontier_publishers = dict()
 	for robot in robots:
 		path_publishers[robot] = rospy.Publisher('/' + robot.name + '/path', Path, queue_size=1)
-		frontier_publishers[robot] = rospy.Publisher('/' + robot.name + '/frontier', PointCloud, queue_size=1)
+	frontier_publishers = rospy.Publisher('/frontier', PointCloud, queue_size=1)
 
 	# Stop moving message.
 	global stop_msg
@@ -764,7 +803,8 @@ def run(args):
 		t.start()
 
 	# Wait for the global occupancy_grid to be initialised
-	while not robots[0].slam.ready:
+
+	while not (robots[0].slam.ready and robots[1].slam.ready):
 		rate_limiter.sleep()
 		continue
 
@@ -772,20 +812,19 @@ def run(args):
 	while not rospy.is_shutdown():
 
 		# Publish frontier to RViz.
-		for robot in robots:
-			frontier_msg = PointCloud()
-			frontier_msg.header.seq = frame_id
-			frontier_msg.header.stamp = rospy.Time.now()
-			frontier_msg.header.frame_id = '/' + robot.prefix + '/odom'
-			for f in robot.frontier.frontiers:
-				for u in f:
-					v = robot.slam.occupancy_grid.get_position(u[0], u[1])
-					frontier_pt = Point32()
-					frontier_pt.x = v[0]
-					frontier_pt.y = v[1]
-					frontier_pt.z = 1
-					frontier_msg.points.append(frontier_pt)
-			frontier_publishers[robot].publish(frontier_msg)
+		frontier_msg = PointCloud()
+		frontier_msg.header.seq = frame_id
+		frontier_msg.header.stamp = rospy.Time.now()
+		frontier_msg.header.frame_id = '/' + robots[0].prefix + '/odom'
+		for f in frontiers:
+			for u in f:
+				v = robot.slam.occupancy_grid.get_position(u[0], u[1])
+				frontier_pt = Point32()
+				frontier_pt.x = v[0]
+				frontier_pt.y = v[1]
+				frontier_pt.z = 1
+				frontier_msg.points.append(frontier_pt)
+		frontier_publishers.publish(frontier_msg)
 
 		# Publish path to RViz.
 		for robot in robots:

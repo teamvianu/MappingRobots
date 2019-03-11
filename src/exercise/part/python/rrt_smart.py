@@ -26,10 +26,8 @@ OCCUPIED = 2
 ROBOT_RADIUS = 0.105 / 2.
 GOAL_POSITION = np.array([1.5, 1.5], dtype=np.float32)  # Any orientation is good.
 START_POSE = np.array([-1.5, -1.5, 0.], dtype=np.float32)
-MAX_ITERATIONS = 500
 
-
-def sample_random_position(min_X, max_X, min_Y, max_Y, occupancy_grid):
+def sample_random_position(centre_X, centre_Y, max_distance, occupancy_grid):
 
   # MISSING: Sample a valid random position (do not sample the yaw).
   # The corresponding cell must be free in the occupancy grid.
@@ -37,12 +35,19 @@ def sample_random_position(min_X, max_X, min_Y, max_Y, occupancy_grid):
   # min_Y = occupancy_grid.get_position(0, 0)[Y]
   # max_X = occupancy_grid.get_position(occupancy_grid.values.shape[0], occupancy_grid.values.shape[1])[X]
   # max_Y = occupancy_grid.get_position(occupancy_grid.values.shape[0], occupancy_grid.values.shape[1])[Y]
-  padding = 2.5
-  rand_x = np.random.uniform(min_X-padding, max_X+padding)
-  rand_y = np.random.uniform(min_Y-padding, max_Y+padding)
-  while not occupancy_grid.is_free(np.array([rand_x, rand_y])):
-    rand_x = np.random.uniform(min_X-padding, max_X+padding)
-    rand_y = np.random.uniform(min_Y-padding, max_Y+padding)
+
+  # padding = 2.5
+  # rand_x = np.random.uniform(min_X-padding, max_X+padding)
+  # rand_y = np.random.uniform(min_Y-padding, max_Y+padding)
+  # while not occupancy_grid.is_free(np.array([rand_x, rand_y])):
+  #   rand_x = np.random.uniform(min_X-padding, max_X+padding)
+  #   rand_y = np.random.uniform(min_Y-padding, max_Y+padding)
+
+  rand_x = np.random.uniform(centre_X-max_distance, centre_X+max_distance)
+  rand_y = np.random.uniform(centre_Y-max_distance, centre_Y+max_distance)
+  while occupancy_grid.is_occupied(np.array([rand_x, rand_y])):
+    rand_x = np.random.uniform(centre_X-max_distance, centre_X+max_distance)
+    rand_y = np.random.uniform(centre_Y-max_distance, centre_Y+max_distance)
 
   position = np.array([rand_x, rand_y])
 
@@ -209,7 +214,7 @@ class Node(object):
     self._cost = c
 
 
-def rrt(start_pose, goal_position, occupancy_grid):
+def rrt(start_pose, goal_position, max_distance, occupancy_grid):
   # RRT builds a graph one node at a time.
   graph = []
   start_node = Node(start_pose)
@@ -218,15 +223,16 @@ def rrt(start_pose, goal_position, occupancy_grid):
     print('Goal position is not in the free space.')
     return start_node, final_node
   graph.append(start_node)
-  min_X, max_X, min_Y, max_Y = start_pose[X], start_pose[X], start_pose[Y], start_pose[Y]
-  for _ in range(MAX_ITERATIONS):
+  max_iterations = 3*max_distance
+  for _ in range(max_iterations):
+    print(_)
     start_time = time.time()
-    position = sample_random_position(min_X, max_X, min_Y, max_Y, occupancy_grid)
+    position = sample_random_position(start_pose[X], start_pose[Y], max_distance, occupancy_grid)
     end_time = time.time()
     # print("Sampling shiny new position takes " + str(end_time - start_time) + " seconds. How slow.")
 
     # With a random chance, draw the goal position.
-    if np.random.rand() < .05:
+    if np.random.rand() < .25:
       position = goal_position
 
     # Find closest node in graph.
@@ -239,7 +245,7 @@ def rrt(start_pose, goal_position, occupancy_grid):
     # Pick a node at least some distance away but not too far.
     u = []
     for n, d in potential_parents:
-      if d > .2 and d < 2.5:
+      if d > 0 and d < 4.0:
         u=n
         break
     if not u:
@@ -255,17 +261,12 @@ def rrt(start_pose, goal_position, occupancy_grid):
     v.parent = u
     graph.append(v)
 
-    min_X = min_X if min_X < position[0] else position[0]
-    max_X = max_X if max_X > position[0] else position[0]
-    min_Y = min_Y if min_Y < position[1] else position[1]
-    max_Y = max_Y if max_Y > position[1] else position[1]
-
     if np.linalg.norm(v.position - goal_position) < .2:
       final_node = v
       break
   return start_node, final_node
 
-def rrt_improved(start_pose, goal_position, occupancy_grid):
+def rrt_improved(start_pose, goal_position, max_distance, occupancy_grid):
   # RRT builds a graph one node at a time.
   graph = []
   start_node = Node(start_pose)
@@ -275,9 +276,9 @@ def rrt_improved(start_pose, goal_position, occupancy_grid):
     return start_node, final_node
   graph.append(start_node)
   min_X, max_X, min_Y, max_Y = start_pose[X], start_pose[X], start_pose[Y], start_pose[Y]
-  for _ in range(MAX_ITERATIONS):
+  for _ in range(max_distance*10):
     start_time = time.time()
-    position = sample_random_position(min_X, max_X, min_Y, max_Y, occupancy_grid)
+    position = sample_random_position(start_pose[X], start_pose[Y], max_distance, occupancy_grid)
     end_time = time.time()
     # print("Sampling shiny new position takes " + str(end_time - start_time) + " seconds. How slow.")
 
