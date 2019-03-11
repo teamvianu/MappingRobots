@@ -4,6 +4,8 @@ from nav_msgs.msg import OccupancyGrid
 from nav_msgs.msg import MapMetaData
 import numpy as np
 
+import argparse
+
 
 FREE = 0
 UNKNOWN = -1
@@ -56,6 +58,13 @@ class OccupancyGridMerger(object):
 
 
 if __name__ == "__main__":
-    rospy.init_node('mapMerger')
-    merger = OccupancyGridMerger('map', 'global_map')
+    parser = argparse.ArgumentParser(description='Merge maps published on a given topic.')
+    parser.add_argument('subscribe_to', default='/map')
+    parser.add_argument('publish_to', default='/global_map')
+
+    args, unknown = parser.parse_known_args()
+
+    rospy.init_node('mapMerger', anonymous=True)
+    rospy.loginfo("Initialized mapMerger node")
+    merger = OccupancyGridMerger(args.subscribe_to, args.publish_to)
     rospy.spin()

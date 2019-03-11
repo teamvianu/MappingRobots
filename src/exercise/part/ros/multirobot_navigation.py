@@ -165,12 +165,12 @@ def is_far_enough_from_corner(position, corners):
 
 
 class Robot(object):
-	def __init__(self, name):
+	def __init__(self, name, map_topic='/global_map'):
 		self._name = name
 		self._prefix = name + "_tf"
 
 		self._publisher = rospy.Publisher('/' + self.name + '/cmd_vel', Twist, queue_size=5)
-		self._slam = SLAM(self)
+		self._slam = SLAM(self, map_topic)
 		self._goal = GoalPose()
 		self._frontier = Frontier(self)
 		self._current_path = []
@@ -330,8 +330,8 @@ class Robot(object):
 
 
 class SLAM(object):
-	def __init__(self, robot):
-		rospy.Subscriber('/global_map', OccupancyGrid, self.callback)
+	def __init__(self, robot, map_topic='/global_map'):
+		rospy.Subscriber(map_topic, OccupancyGrid, self.callback)
 		self._tf = TransformListener()
 		self._occupancy_grid = None
 		self._pose = np.array([np.nan, np.nan, np.nan], dtype=np.float32)
@@ -742,8 +742,8 @@ def run(args):
 	rate_limiter = rospy.Rate(100)
 
 	global robots
-	robot1 = Robot("robot1")
-	robot2 = Robot("robot2")
+	robot1 = Robot("robot1", args.map_topic[0])
+	robot2 = Robot("robot2", args.map_topic[1])
 	robots = [robot1, robot2]
 
 	frame_id = 0
@@ -809,6 +809,7 @@ def run(args):
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description='Runs RRT navigation')
+	parser.add_argument('map_topic', nargs=2)
 	args, unknown = parser.parse_known_args()
 	try:
 		run(args)
