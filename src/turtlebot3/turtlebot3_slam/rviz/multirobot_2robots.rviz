@@ -5,7 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /TF1/Frames1
-        - /CentralMap1
+        - /GlobalMap1
       Splitter Ratio: 0.594406009
     Tree Height: 475
   - Class: rviz/Selection
@@ -189,7 +189,7 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: true
       Max Color: 0; 255; 0
-      Max Intensity: 0
+      Max Intensity: 4.75425017e-35
       Min Color: 0; 255; 0
       Min Intensity: 0
       Name: LaserScan1
@@ -321,7 +321,7 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: true
       Max Color: 0; 255; 0
-      Max Intensity: 1.40129846e-45
+      Max Intensity: 4.94911591e-35
       Min Color: 0; 255; 0
       Min Intensity: 0
       Name: LaserScan2
@@ -341,8 +341,8 @@ Visualization Manager:
       Color Scheme: map
       Draw Behind: false
       Enabled: true
-      Name: CentralMap
-      Topic: /central_map
+      Name: GlobalMap
+      Topic: /global_map
       Unreliable: false
       Use Timestamp: false
       Value: true
