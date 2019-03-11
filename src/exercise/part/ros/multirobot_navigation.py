@@ -331,7 +331,7 @@ class Robot(object):
 
 class SLAM(object):
 	def __init__(self, robot):
-		rospy.Subscriber('/map', OccupancyGrid, self.callback)
+		rospy.Subscriber('/central_map', OccupancyGrid, self.callback)
 		self._tf = TransformListener()
 		self._occupancy_grid = None
 		self._pose = np.array([np.nan, np.nan, np.nan], dtype=np.float32)
