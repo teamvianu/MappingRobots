@@ -48,12 +48,17 @@ class OccupancyGridMerger(object):
         rospy.loginfo('Published new global map')
 
     def _decide_cell_occupancy(self, a, b):
+        eps = 1
         if a == b:
             return a
         if a == UNKNOWN:
             return b
         if b == UNKNOWN:
             return a
+        if a == 0:
+            a += eps
+        if b == 0:
+            b += eps
         return a * b / 100.
 
 
