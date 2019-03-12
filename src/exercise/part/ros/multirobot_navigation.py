@@ -211,8 +211,8 @@ class Robot(object):
 		if assigned_frontier_point is None:
 			print("Robot " + self._name + " doesn't have a frontier point to go to")
 			# If no more frontier points, move around randomly
-			random_angle = np.random.uniform(0, 2 * np.pi)
-			random_distance = 0.75
+			random_angle = np.random.uniform(-np.pi/2, np.pi/2) + self._slam.pose[YAW]
+			random_distance = 0.45
 			self.assign_goal((self._slam.pose[X] + random_distance * np.cos(random_angle),
 			             self._slam.pose[Y] + random_distance * np.sin(random_angle)))
 			self._random_walking = True
@@ -225,6 +225,11 @@ class Robot(object):
 		if np.isnan(goal_position[X]) or np.isnan(goal_position[Y]):
 			rate_limiter.sleep()
 			self._update_robot_assignment()
+		while not check_if_point_is_free_around(goal_position, self._slam.occupancy_grid):
+			random_angle = np.random.uniform(-np.pi/2, np.pi/2) + self._slam.pose[YAW]
+			random_distance = 0.45
+			goal_position = (self._slam.pose[X] + random_distance * np.cos(random_angle),
+			                  self._slam.pose[Y] + random_distance * np.sin(random_angle))
 		self._goal.position[X] = goal_position[X]
 		self._goal.position[Y] = goal_position[Y]
 		print('Assigned ' + self._name + ' new goal position: ', goal_position)
@@ -305,8 +310,8 @@ class Robot(object):
 				self._frontier.remove_frontier_containing_point((self._goal.position[X], self._goal.position[Y]))
 				if not self._random_walking:
 					self._max_distance *= 2
-				random_angle = np.random.uniform(0, 2 * np.pi)
-				random_distance = 1
+				random_angle = np.random.uniform(-np.pi / 2, np.pi / 2) + self._slam.pose[YAW]
+				random_distance = 0.4
 				self.assign_goal((self._slam.pose[X] + random_distance * np.cos(random_angle),
 				                  self._slam.pose[Y] + random_distance * np.sin(random_angle)))
 				self._may_change_path = True
@@ -455,7 +460,7 @@ class Frontier(object):
 			return neighbours
 
 		def _is_frontier_point(point):
-			if self._occupancy_grid.values[point] != FREE:
+			if self._occupancy_grid.values[point] != FREE or not check_if_point_is_free_around(point, self._occupancy_grid):
 				return False
 			neighbours = _get_neighbours(point)
 			for neighbour in neighbours:
@@ -531,10 +536,12 @@ class Frontier(object):
 					points_indexes_to_split.append(frontier.index(point))
 
 			points_indexes_to_split.append(len(frontier))
-			if frontier in frontiers:
+			try :
 				frontiers.extend([frontier[points_indexes_to_split[i] + 1:points_indexes_to_split[i + 1] + 1] for i in
 				                        range(len(points_indexes_to_split) - 1)])
 				frontiers.remove(frontier)
+			except:
+				print("Frontiers concurently updated")
 		frontiers = filter(None, frontiers)  # Erase empty lists
 
 		for frontier in frontiers:
@@ -721,6 +728,16 @@ def initialise_utility_to_each_cell():
 	return frontier_utilities
 
 
+def check_if_point_is_free_around(point, occupancy_grid):
+	x_range = np.linspace(point[0]-2*ROBOT_RADIUS, point[0]+2*ROBOT_RADIUS, 10)
+	y_range = np.linspace(point[1]-2*ROBOT_RADIUS, point[1]+2*ROBOT_RADIUS, 10)
+	for x in x_range:
+		for y in y_range:
+			if occupancy_grid.is_occupied((x,y)):
+				return False
+	return True
+
+
 def check_if_obstacle_on_line(start, end, occupancy_grid):
 	points_on_line = line(start, end)
 	for point in points_on_line:
@@ -752,9 +769,9 @@ def initialise_robots_goals_assignment(robots):
 		if assigned_frontier_point is None:
 			# If no more frontier points, move around randomly
 			print("No more frontier points to go to at initial goals assignment")
-			random_angle = np.random.uniform(0, 2 * np.pi)
 			random_distance = 0.2
 			for robot in robots_copy:
+				random_angle = np.random.uniform(-np.pi / 2, np.pi / 2) + robot.slam.pose[YAW]
 				print("Robot " + robot.name + " doesn't have a frontier point to go to")
 				robot.assign_goal((robot.slam.pose[X] + random_distance * np.cos(random_angle),
 				                   robot.slam.pose[Y] + random_distance * np.sin(random_angle)))
@@ -769,6 +786,42 @@ def initialise_robots_goals_assignment(robots):
 
 		assigned_robot.assign_goal(occupancy_grid.get_position(assigned_frontier_point[X], assigned_frontier_point[Y]))
 		robots_copy.remove(assigned_robot)
+
+
+def get_coverage_percentage(occupancy_grid):
+	top_left_corner = occupancy_grid.get_index((7.5, 5.2))
+	top_right_corner = occupancy_grid.get_index((7.5, -5.2))
+	top_bottom_left_corner = occupancy_grid.get_index((5, 5.2))
+	top_bottom_right_corner = occupancy_grid.get_index((5, -5.2))
+
+	middle_top_right_corner = occupancy_grid.get_index((5, -0.2))
+	middle_bottom_right_corner = occupancy_grid.get_index((-5, -0.2))
+
+	bottom_top_left_corner = occupancy_grid.get_index((-5, 5.2))
+	bottom_top_right_corner = occupancy_grid.get_index((-5, -4.2))
+	bottom_left_corner = occupancy_grid.get_index((-7.5, 5.2))
+	bottom_right_corner = occupancy_grid.get_index((-7.5, -4.2))
+
+	total = 0
+	covered = 0
+
+	for i in range(top_bottom_left_corner[0], top_right_corner[0]):
+		for j in range(top_right_corner[1], top_bottom_left_corner[1]):
+			total += 1
+			covered = covered+1 if occupancy_grid.values[i,j] != UNKNOWN else covered
+
+	for i in range(bottom_top_left_corner[0], middle_top_right_corner[0]):
+		for j in range(middle_top_right_corner[1], bottom_top_left_corner[1]):
+			total += 1
+			covered = covered + 1 if occupancy_grid.values[i, j] != UNKNOWN else covered
+
+	for i in range(bottom_left_corner[0], bottom_top_right_corner[0]):
+		for j in range(bottom_top_right_corner[1], bottom_left_corner[1]):
+			total += 1
+			covered = covered + 1 if occupancy_grid.values[i, j] != UNKNOWN else covered
+
+	print("At time " + str(rospy.Time.now().to_sec()))
+	return "The coverage percentage area is " + str(covered/total * 100)
 
 
 def run(args):
@@ -790,7 +843,7 @@ def run(args):
 	frontier_publishers = dict()
 	for robot in robots:
 		path_publishers[robot] = rospy.Publisher('/' + robot.name + '/path', Path, queue_size=1)
-	frontier_publishers = rospy.Publisher('/frontier', PointCloud, queue_size=1)
+		frontier_publishers[robot] = rospy.Publisher('/' + robot.name + '/frontier', PointCloud, queue_size=1)
 
 	# Stop moving message.
 	global stop_msg
@@ -803,28 +856,33 @@ def run(args):
 		t.start()
 
 	# Wait for the global occupancy_grid to be initialised
-
 	while not (robots[0].slam.ready and robots[1].slam.ready):
 		rate_limiter.sleep()
 		continue
 
+
+	iterations = 0
 	initialise_robots_goals_assignment(robots)
 	while not rospy.is_shutdown():
+		iterations += 1
+		if not iterations % 100:
+			print(get_coverage_percentage(robot1.slam.occupancy_grid))
 
 		# Publish frontier to RViz.
-		frontier_msg = PointCloud()
-		frontier_msg.header.seq = frame_id
-		frontier_msg.header.stamp = rospy.Time.now()
-		frontier_msg.header.frame_id = '/' + robots[0].prefix + '/odom'
-		for f in frontiers:
-			for u in f:
-				v = robot.slam.occupancy_grid.get_position(u[0], u[1])
-				frontier_pt = Point32()
-				frontier_pt.x = v[0]
-				frontier_pt.y = v[1]
-				frontier_pt.z = 1
-				frontier_msg.points.append(frontier_pt)
-		frontier_publishers.publish(frontier_msg)
+		for robot in robots:
+			frontier_msg = PointCloud()
+			frontier_msg.header.seq = frame_id
+			frontier_msg.header.stamp = rospy.Time.now()
+			frontier_msg.header.frame_id = '/' + robot.prefix + '/odom'
+			for f in robot.frontier.frontiers:
+				for u in f:
+					v = robot.slam.occupancy_grid.get_position(u[0], u[1])
+					frontier_pt = Point32()
+					frontier_pt.x = v[0]
+					frontier_pt.y = v[1]
+					frontier_pt.z = 1
+					frontier_msg.points.append(frontier_pt)
+			frontier_publishers[robot].publish(frontier_msg)
 
 		# Publish path to RViz.
 		for robot in robots:
