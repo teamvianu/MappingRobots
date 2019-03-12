@@ -1,0 +1,7 @@
+float64 max_distance
+geometry_msgs/Point position1
+geometry_msgs/Point position2
+nav_msgs/OccupancyGrid occupancy_grid
+string requesterID
+---
+bool has_been_fused
